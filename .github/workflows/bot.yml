@@ -25,4 +25,5 @@ jobs:
       - name: Run Bot
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }} # Передаем куки (если добавишь)
         run: python bot.py
