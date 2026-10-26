@@ -1,4 +1,4 @@
 aiogram==3.4.1
-yt-dlp[default,curl-cffi]>=2025.05.22
-bgutil-ytdlp-pot-provider
+yt-dlp[default]
 pysocks
+bgutil-ytdlp-pot-provider
