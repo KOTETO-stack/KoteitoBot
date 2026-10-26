@@ -1,0 +1,43 @@
+name: My Video Bot
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: bot-runner
+  cancel-in-progress: false
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+
+    steps:
+      - name: Скачиваем код
+        uses: actions/checkout@v4
+
+      - name: Устанавливаем Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Устанавливаем зависимости
+        run: |
+          pip install -U pip
+          pip install -U -r requirements.txt
+
+      - name: Ищем рабочий прокси
+        id: proxy
+        uses: maximilianfeix/proxy-scraper@v1
+        with:
+          types: socks5
+          https: true
+          min-uptime: 90
+
+      - name: Запускаем бота
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          SOCKS5_PROXY: ${{ steps.proxy.outputs.proxy }}
+        run: python bot.py
