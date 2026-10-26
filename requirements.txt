@@ -1,4 +1,3 @@
 aiogram==3.4.1
-yt-dlp[default]
+yt-dlp[default,curl-cffi]
 pysocks
-bgutil-ytdlp-pot-provider
