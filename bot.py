@@ -45,14 +45,19 @@ async def download_media(message: types.Message):
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
-        # Указываем yt-dlp брать PO-токены с нашего локального сервера
+        # ИСПОЛЬЗУЕМ МЕНЕЕ ПОПУЛЯРНЫЕ КЛИЕНТЫ (tv, mweb) ВМЕСТО web/ios
         'extractor_args': {
-            'youtubepot-bgutilhttp': {
-                'base_url': ['http://127.0.0.1:4416']
-            },
             'youtube': {
-                'player_client': ['web_safari', 'mweb', 'tv'],
+                'player_client': ['tv', 'mweb', 'web_safari'],
+                'player_skip': ['webpage', 'configs'], # Пропускаем лишние запросы, которые триггерят бота
             }
+        },
+        # Настройки для получения PO-токенов
+        'youtubepot-bgutilhttp': {
+            'base_url': ['http://127.0.0.1:4416']
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
     }
     
@@ -74,9 +79,10 @@ async def download_media(message: types.Message):
         await msg.delete()
         
     except Exception as e:
+        # Выводим ошибку обычным текстом, чтобы видеть причину
         error_text = str(e)
-        if len(error_text) > 500: 
-            error_text = error_text[:500] + "..."
+        if len(error_text) > 600: 
+            error_text = error_text[:600] + "..."
         await msg.edit_text(f"❌ Ошибка:\n{error_text}")
 
 async def main():
