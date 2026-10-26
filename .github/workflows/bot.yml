@@ -1,0 +1,42 @@
+name: Continuous Bot
+
+on:
+  schedule:
+    # Запускаем каждые 6 часов. GitHub может задержать старт на 5-15 минут.
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Позволяет запустить вручную для проверки
+
+concurrency:
+  group: lukidown-bot-runner
+  cancel-in-progress: false # Новый запуск ждет завершения текущего, а не убивает его
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355 # ~5 ч 55 мин. Защита от принудительной остановки GitHub на 6 часах.
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # Версия, указанная в Dockerfile проекта
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Telegram Bot
+        env:
+          # Все секреты передаются в бота как переменные окружения
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          API_ID: ${{ secrets.API_ID }}
+          API_HASH: ${{ secrets.API_HASH }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          RU_PROXY: ${{ secrets.RU_PROXY }} # Опционально, для VK/Rutube
+        run: python bot.py
