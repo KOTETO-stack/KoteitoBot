@@ -5,7 +5,6 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import FSInputFile, LabeledPrice
 import yt_dlp
-from pytubefix import YouTube
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 SOCKS5_PROXY = os.getenv("SOCKS5_PROXY")
@@ -39,43 +38,23 @@ async def successful_payment(message: types.Message):
 @dp.message(F.text.regexp(r'https?://[^\s]+'))
 async def download_media(message: types.Message):
     url = message.text
-    msg = await message.answer("⏳ Обрабатываю ссылку...")
+    msg = await message.answer("⏳ Скачиваю, подождите...")
     
-    # --- ЛОГИКА ДЛЯ YOUTUBE (pytubefix) ---
-    if "youtu" in url:
-        try:
-            await msg.edit_text("⏳ Скачиваю с YouTube...")
-            
-            def _download_yt():
-                yt = YouTube(url)
-                stream = yt.streams.get_highest_resolution()
-                if not stream:
-                    raise Exception("Не найден подходящий поток")
-                
-                os.makedirs('downloads', exist_ok=True)
-                filepath = stream.download(output_path='downloads')
-                return filepath
-
-            loop = asyncio.get_event_loop()
-            filepath = await loop.run_in_executor(None, _download_yt)
-            
-            await message.answer_video(FSInputFile(filepath))
-            os.remove(filepath)
-            await msg.delete()
-            return
-            
-        except Exception as e:
-            logging.error(f"pytubefix Error: {e}")
-            await msg.edit_text("❌ Не удалось скачать с YouTube. Возможно, видео заблокировано или требует входа.")
-            return
-
-    # --- ЛОГИКА ДЛЯ ОСТАЛЬНЫХ САЙТОВ (yt-dlp) ---
-    await msg.edit_text("⏳ Скачиваю через встроенный движок...")
     ydl_opts = {
         'format': 'best[ext=mp4]/best',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
+        # Включаем использование PO-токенов и маскировку под браузер Safari
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['web_safari', 'mweb', 'tv'],
+                'player_skip': ['configs'],
+            },
+            'youtubepot-bgutilhttp': {
+                'base_url': ['http://127.0.0.1:4416']
+            }
+        },
     }
     
     if SOCKS5_PROXY:
@@ -83,6 +62,7 @@ async def download_media(message: types.Message):
 
     try:
         os.makedirs('downloads', exist_ok=True)
+        
         loop = asyncio.get_event_loop()
         def _download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -95,8 +75,8 @@ async def download_media(message: types.Message):
         await msg.delete()
         
     except Exception as e:
-        logging.error(f"yt-dlp Error: {e}")
-        await msg.edit_text(f"❌ Ошибка при скачивании. Проверьте ссылку.")
+        logging.error(f"Error: {e}")
+        await msg.edit_text("❌ Не удалось скачать. Возможно, видео заблокировано или ссылка неверна.")
 
 async def main():
     logging.basicConfig(level=logging.INFO)
