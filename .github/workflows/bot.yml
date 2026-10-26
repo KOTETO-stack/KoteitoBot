@@ -1,50 +1,126 @@
-name: My Video Bot
+import os
+import logging
+import asyncio
+import aiohttp
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command
+from aiogram.types import FSInputFile, LabeledPrice
+import yt_dlp
 
-on:
-  schedule:
-    - cron: '0 */6 * * *'
-  workflow_dispatch:
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+SOCKS5_PROXY = os.getenv("SOCKS5_PROXY")
 
-concurrency:
-  group: bot-runner
-  cancel-in-progress: false
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher()
 
-jobs:
-  run-bot:
-    runs-on: ubuntu-latest
-    timeout-minutes: 355
+@dp.message(Command("start"))
+async def start_cmd(message: types.Message):
+    await message.answer("👋 Привет! Отправь мне ссылку на видео (YouTube, VK, Pinterest и др.).")
 
-    steps:
-      - name: Скачиваем код
-        uses: actions/checkout@v4
+@dp.message(Command("buy"))
+async def buy_stars(message: types.Message):
+    await message.answer_invoice(
+        title="Поддержка бота",
+        description="Отправьте 1 звезду.",
+        payload="donate_1_star",
+        provider_token="",
+        currency="XTR",
+        prices=[LabeledPrice(label="Звезда", amount=1)]
+    )
 
-      - name: Устанавливаем Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+@dp.pre_checkout_query()
+async def pre_checkout(pre_checkout_q: types.PreCheckoutQuery):
+    await bot.answer_pre_checkout_query(pre_checkout_q.id, ok=True)
 
-      - name: Устанавливаем ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+@dp.message(F.successful_payment)
+async def successful_payment(message: types.Message):
+    await message.answer("Спасибо огромное за поддержку! ⭐️❤️")
 
-      - name: Устанавливаем зависимости
-        run: pip install -r requirements.txt
+@dp.message(F.text.regexp(r'https?://[^\s]+'))
+async def download_media(message: types.Message):
+    url = message.text
+    msg = await message.answer("⏳ Обрабатываю ссылку...")
+    
+    # Если это YouTube, используем Cobalt API
+    if "youtu" in url:
+        try:
+            await msg.edit_text("⏳ Скачиваю через Cobalt...")
+            # Бесплатный публичный сервер Cobalt
+            api_url = "https://api.cobalt.tools/api/json"
+            headers = {
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "url": url,
+                "vQuality": "720" # Можно поставить 1080 или max
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(api_url, json=payload, headers=headers) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        video_url = data.get("url")
+                        
+                        if not video_url:
+                            raise Exception("Cobalt не вернул ссылку (возможно, ссылка приватная).")
+                        
+                        # Скачиваем файл по прямой ссылке
+                        filepath = f"downloads/{message.message_id}.mp4"
+                        os.makedirs('downloads', exist_ok=True)
+                        
+                        async with session.get(video_url) as video_resp:
+                            if video_resp.status == 200:
+                                with open(filepath, 'wb') as f:
+                                    async for chunk in video_resp.content.iter_chunked(1024*1024):
+                                        f.write(chunk)
+                            else:
+                                raise Exception("Не удалось скачать файл с сервера Cobalt.")
+                        
+                        await message.answer_video(FSInputFile(filepath))
+                        os.remove(filepath)
+                        await msg.delete()
+                        return
+                    else:
+                        error_data = await resp.text()
+                        raise Exception(f"Ошибка Cobalt API: {resp.status} - {error_data}")
+        except Exception as e:
+            logging.error(f"Cobalt Error: {e}")
+            await msg.edit_text("❌ YouTube заблокировал скачивание, или сервер Cobalt перегружен. Попробуйте позже.")
+            return
 
-      - name: Запускаем сервер PO Token (обход блокировки YouTube)
-        run: |
-          docker run -d --name bgutil-provider --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider:latest
-          echo "Ждем запуска сервера токенов..."
-          sleep 7
+    # Для всех остальных сайтов (VK, Pinterest, Rutube и т.д.) используем yt-dlp
+    await msg.edit_text("⏳ Скачиваю через yt-dlp...")
+    ydl_opts = {
+        'format': 'best[ext=mp4]/best',
+        'outtmpl': 'downloads/%(id)s.%(ext)s',
+        'quiet': True,
+        'no_warnings': True,
+    }
+    
+    if SOCKS5_PROXY:
+        ydl_opts['proxy'] = SOCKS5_PROXY
 
-      - name: Ищем рабочий прокси (для VK и др.)
-        id: proxy
-        uses: maximilianfeix/proxy-scraper@v1
-        with:
-          types: socks5
-          https: true
-          min-uptime: 90
+    try:
+        os.makedirs('downloads', exist_ok=True)
+        loop = asyncio.get_event_loop()
+        def _download():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                return ydl.prepare_filename(info)
+        
+        filepath = await loop.run_in_executor(None, _download)
+        await message.answer_video(FSInputFile(filepath))
+        os.remove(filepath)
+        await msg.delete()
+        
+    except Exception as e:
+        logging.error(f"yt-dlp Error: {e}")
+        await msg.edit_text(f"❌ Ошибка при скачивании файла.")
 
-      - name: Запускаем бота
-        env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          SOCKS5_PROXY: ${{ steps.proxy.outputs.proxy }}
-        run: python bot.py
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
