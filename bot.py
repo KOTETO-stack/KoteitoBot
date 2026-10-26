@@ -5,6 +5,7 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import FSInputFile, LabeledPrice
 import yt_dlp
+import yt_cookies
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 SOCKS5_PROXY = os.getenv("SOCKS5_PROXY")
@@ -38,25 +39,40 @@ async def successful_payment(message: types.Message):
 @dp.message(F.text.regexp(r'https?://[^\s]+'))
 async def download_media(message: types.Message):
     url = message.text
-    msg = await message.answer("⏳ Пробую обойти защиту YouTube...")
+    msg = await message.answer("⏳ Обрабатываю ссылку...")
     
+    # --- АВТОМАТИЧЕСКОЕ ПОЛУЧЕНИЕ КУКИ ---
+    cookie_header = None
+    if "youtu" in url:
+        try:
+            logging.info("Запрашиваю свежие куки с удаленного API...")
+            # Библиотека возвращает готовую строку для заголовка Cookie
+            cookie_header = yt_cookies.youtube()
+            logging.info("Куки успешно получены.")
+        except Exception as e:
+            logging.error(f"Не удалось получить куки: {e}")
+            # Если не удалось, пробуем без куки (иногда срабатывает)
+
     ydl_opts = {
         'format': 'best[ext=mp4]/best',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
-        # МАСКИРОВКА ПОД CHROME (главный козырь)
-        'impersonate': 'chrome',
+        # Отключаем поиск локальных файлов куки, так как используем заголовок
+        'cookiefile': None,
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
         },
         'extractor_args': {
             'youtube': {
-                'player_client': ['ios', 'web_safari', 'mweb'],
+                'player_client': ['web_safari', 'mweb', 'tv'],
             }
         },
     }
+    
+    # Если куки получены, подставляем их в заголовки
+    if cookie_header:
+        ydl_opts['http_headers']['Cookie'] = cookie_header
     
     if SOCKS5_PROXY:
         ydl_opts['proxy'] = SOCKS5_PROXY
@@ -76,11 +92,10 @@ async def download_media(message: types.Message):
         await msg.delete()
         
     except Exception as e:
-        # ВЫВОДИМ ОШИБКУ НА ЭКРАН, ЧТОБЫ ВИДЕТЬ ПРИЧИНУ
         error_text = str(e)
         if len(error_text) > 500: 
             error_text = error_text[:500] + "..."
-        await msg.edit_text(f"❌ Ошибка:\n<code>{error_text}</code>", parse_mode="HTML")
+        await msg.edit_text(f"❌ Ошибка:\n{error_text}")
 
 async def main():
     logging.basicConfig(level=logging.INFO)
