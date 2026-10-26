@@ -16,28 +16,8 @@ dp = Dispatcher()
 async def start_cmd(message: types.Message):
     await message.answer(
         "👋 Привет! Я бот для скачивания видео.\n\n"
-        "Просто отправь мне ссылку на видео из YouTube, VK, Pinterest и других сервисов.\n\n"
-        "⭐ Поддержать проект звездами: /buy"
+        "Просто отправь мне ссылку на видео."
     )
-
-@dp.message(Command("buy"))
-async def buy_stars(message: types.Message):
-    await message.answer_invoice(
-        title="Поддержка бота",
-        description="Отправьте 1 звезду для поддержки разработчика.",
-        payload="donate_1_star",
-        provider_token="",
-        currency="XTR",
-        prices=[LabeledPrice(label="Звезда", amount=1)]
-    )
-
-@dp.pre_checkout_query()
-async def pre_checkout(pre_checkout_q: types.PreCheckoutQuery):
-    await bot.answer_pre_checkout_query(pre_checkout_q.id, ok=True)
-
-@dp.message(F.successful_payment)
-async def successful_payment(message: types.Message):
-    await message.answer("Спасибо огромное за поддержку! ⭐️❤️")
 
 @dp.message(F.text.regexp(r'https?://[^\s]+'))
 async def download_media(message: types.Message):
@@ -49,7 +29,6 @@ async def download_media(message: types.Message):
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
-        # Маскировка под ТВ и мобильные устройства + принудительный вызов PO Token
         'extractor_args': {
             'youtube': {
                 'player_client': ['tv', 'mweb', 'web_safari'],
@@ -76,8 +55,12 @@ async def download_media(message: types.Message):
         await msg.delete()
         
     except Exception as e:
-        logging.error(f"Ошибка скачивания: {e}")
-        await msg.edit_text("❌ Ошибка при скачивании. Проверьте ссылку или попробуйте позже.")
+        # ТЕПЕРЬ МЫ ВЫВОДИМ СИСТЕМНУЮ ОШИБКУ
+        error_text = str(e)
+        if len(error_text) > 800: # Обрезаем, если ошибка слишком длинная
+            error_text = error_text[:800] + "..."
+        
+        await msg.edit_text(f"❌ Ошибка:\n<code>{error_text}</code>", parse_mode="HTML")
 
 async def main():
     logging.basicConfig(level=logging.INFO)
