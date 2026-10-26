@@ -38,21 +38,22 @@ async def successful_payment(message: types.Message):
 @dp.message(F.text.regexp(r'https?://[^\s]+'))
 async def download_media(message: types.Message):
     url = message.text
-    msg = await message.answer("⏳ Скачиваю, подождите...")
+    msg = await message.answer("⏳ Пробую обойти защиту YouTube...")
     
     ydl_opts = {
         'format': 'best[ext=mp4]/best',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
-        # Включаем использование PO-токенов и маскировку под браузер Safari
+        # МАСКИРОВКА ПОД CHROME (главный козырь)
+        'impersonate': 'chrome',
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        },
         'extractor_args': {
             'youtube': {
-                'player_client': ['web_safari', 'mweb', 'tv'],
-                'player_skip': ['configs'],
-            },
-            'youtubepot-bgutilhttp': {
-                'base_url': ['http://127.0.0.1:4416']
+                'player_client': ['ios', 'web_safari', 'mweb'],
             }
         },
     }
@@ -75,8 +76,11 @@ async def download_media(message: types.Message):
         await msg.delete()
         
     except Exception as e:
-        logging.error(f"Error: {e}")
-        await msg.edit_text("❌ Не удалось скачать. Возможно, видео заблокировано или ссылка неверна.")
+        # ВЫВОДИМ ОШИБКУ НА ЭКРАН, ЧТОБЫ ВИДЕТЬ ПРИЧИНУ
+        error_text = str(e)
+        if len(error_text) > 500: 
+            error_text = error_text[:500] + "..."
+        await msg.edit_text(f"❌ Ошибка:\n<code>{error_text}</code>", parse_mode="HTML")
 
 async def main():
     logging.basicConfig(level=logging.INFO)
