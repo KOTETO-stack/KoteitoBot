@@ -2,8 +2,8 @@ name: My Video Bot
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # Каждые 6 часов
-  workflow_dispatch:      # Ручной запуск
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 
 concurrency:
   group: bot-runner
@@ -12,7 +12,7 @@ concurrency:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 355 # 5ч 55мин
+    timeout-minutes: 355
 
     steps:
       - name: Скачиваем код
@@ -23,13 +23,19 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Устанавливаем ffmpeg (нужен для склейки видео)
+      - name: Устанавливаем ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Устанавливаем зависимости
         run: pip install -r requirements.txt
 
-      - name: Ищем рабочий прокси (чтобы качать с VK и др.)
+      - name: Запускаем сервер PO Token (обход блокировки YouTube)
+        run: |
+          docker run -d --name bgutil-provider --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider:latest
+          echo "Ждем запуска сервера токенов..."
+          sleep 7
+
+      - name: Ищем рабочий прокси (для VK и др.)
         id: proxy
         uses: maximilianfeix/proxy-scraper@v1
         with:
