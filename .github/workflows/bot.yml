@@ -23,12 +23,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      # Шаг с ffmpeg мы удалили, так как он уже есть в системе
-
       - name: Устанавливаем зависимости
         run: pip install -r requirements.txt
 
-      - name: Ищем рабочий прокси
+      - name: Ищем рабочий прокси (для VK и др.)
         id: proxy
         uses: maximilianfeix/proxy-scraper@v1
         with:
