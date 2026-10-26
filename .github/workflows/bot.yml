@@ -1,19 +1,19 @@
-name: Continuous Bot
+name: Continuous Bot with Auto-Proxy
 
 on:
   schedule:
-    # Запускаем каждые 6 часов. GitHub может задержать старт на 5-15 минут.
+    # Запуск каждые 6 часов. GitHub может задержать старт на 5-15 минут.
     - cron: '0 */6 * * *'
   workflow_dispatch: # Позволяет запустить вручную для проверки
 
 concurrency:
   group: lukidown-bot-runner
-  cancel-in-progress: false # Новый запуск ждет завершения текущего, а не убивает его
+  cancel-in-progress: false # Новый запуск ждет завершения текущего
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 355 # ~5 ч 55 мин. Защита от принудительной остановки GitHub на 6 часах.
+    timeout-minutes: 355 # ~5 ч 55 мин. Защита от принудительной остановки GitHub.
 
     steps:
       - name: Checkout repository
@@ -22,7 +22,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Версия, указанная в Dockerfile проекта
+          python-version: '3.11'
 
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
@@ -30,13 +30,24 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
+      # АВТОМАТИЧЕСКИЙ ПОИСК ПРОКСИ
+      - name: Find working SOCKS5 proxy
+        id: proxy
+        uses: maximilianfeix/proxy-scraper@v1
+        with:
+          types: socks5        # Ищем именно SOCKS5, как требует бот
+          https: true          # Проверяем, что прокси тянет HTTPS
+          min-uptime: 90       # Прокси должен быть стабилен 90% времени
+          min-speed: 100       # Минимальная скорость 100+ КБ/с
+          works-on: google     # Проверяем доступ к Google (базовая проверка)
+
       - name: Run Telegram Bot
         env:
-          # Все секреты передаются в бота как переменные окружения
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           API_ID: ${{ secrets.API_ID }}
           API_HASH: ${{ secrets.API_HASH }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
-          RU_PROXY: ${{ secrets.RU_PROXY }} # Опционально, для VK/Rutube
+          # Бот автоматически получит самый быстрый и рабочий прокси
+          SOCKS5_PROXY: ${{ steps.proxy.outputs.proxy }}
         run: python bot.py
