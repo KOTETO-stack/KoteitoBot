@@ -1,5 +1,4 @@
 aiogram==3.4.1
-yt-dlp
+yt-dlp[default]
 pysocks
-aiohttp
-pytubefix
+bgutil-ytdlp-pot-provider
