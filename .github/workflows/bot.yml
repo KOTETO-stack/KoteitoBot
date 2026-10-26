@@ -28,7 +28,14 @@ jobs:
           pip install -U pip
           pip install -U -r requirements.txt
 
-      - name: Ищем рабочий прокси
+      # ЗАПУСК ГЕНЕРАТОРА ТОКЕНОВ (ОБХОД БЛОКИРОВКИ YOUTUBE)
+      - name: Запускаем сервер PO Token
+        run: |
+          docker run -d --name bgutil-provider -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider:latest
+          echo "Ожидаем запуск сервера токенов..."
+          sleep 10
+
+      - name: Ищем рабочий прокси (для VK и др.)
         id: proxy
         uses: maximilianfeix/proxy-scraper@v1
         with:
